@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "uvicorn api:app --host 0.0.0.0 --port $PORT"
+startCommand = "python main.py"
 
 [[volumes]]
 mountPath = "/data"
