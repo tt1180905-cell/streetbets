@@ -439,13 +439,23 @@ def _build_filters(
 
 
 # Serve dashboard static files
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-if os.path.exists(STATIC_DIR):
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# Use absolute path relative to this file — works regardless of working directory
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+
+@app.on_event("startup")
+async def startup():
+    if os.path.exists(STATIC_DIR):
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+        print(f"[Web] Static files served from {STATIC_DIR}")
+    else:
+        print(f"[Web] WARNING: static dir not found at {STATIC_DIR}")
 
 @app.get("/")
 def root():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    index = os.path.join(STATIC_DIR, "index.html")
+    if not os.path.exists(index):
+        return {"status": "StreetBets running", "error": f"Dashboard not found at {index}", "static_dir": STATIC_DIR, "files": os.listdir(os.path.dirname(STATIC_DIR)) if os.path.exists(os.path.dirname(STATIC_DIR)) else []}
+    return FileResponse(index)
 
 
 if __name__ == "__main__":
