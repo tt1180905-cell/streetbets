@@ -23,18 +23,37 @@ SNAPSHOT_LABELS = {
     (15, 0): "3:00",
 }
 
-PREDICTION_INTERVAL = 0.002   # 0.2% steps
-SPOT_RANGE          = 0.05    # ±5%
+SPOT_RANGE = 0.05  # ±5% contract filter
 
 
 def _prediction_pcts() -> list[float]:
-    """Generate prediction % points from -5% to +5% at 0.2% intervals."""
-    pcts = []
-    p = -SPOT_RANGE
-    while p <= SPOT_RANGE + 1e-9:
-        pcts.append(round(p, 4))
-        p += PREDICTION_INTERVAL
-    return pcts
+    """
+    Variable-density prediction grid:
+      ±0–1%   : 0.05% steps  (41 points)
+      ±1–3%   : 0.10% steps  (40 points)
+      ±3–5%   : 0.25% steps  (16 points)
+    Total: 97 unique points
+    """
+    pcts = set()
+
+    def add_range(start, stop, step):
+        v = start
+        while v <= stop + 1e-9:
+            pcts.add(round(v, 4))
+            v = round(v + step, 4)
+
+    # Core: -1% to +1% at 0.05%
+    add_range(-0.01, 0.01, 0.0005)
+
+    # Mid: -3% to -1% and +1% to +3% at 0.1%
+    add_range(-0.03, -0.01, 0.001)
+    add_range( 0.01,  0.03, 0.001)
+
+    # Outer: -5% to -3% and +3% to +5% at 0.25%
+    add_range(-0.05, -0.03, 0.0025)
+    add_range( 0.03,  0.05, 0.0025)
+
+    return sorted(pcts)
 
 
 def run_snapshot(underlying: str, now: datetime = None) -> int:
