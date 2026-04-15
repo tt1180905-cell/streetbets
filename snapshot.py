@@ -149,16 +149,19 @@ def run_snapshot(underlying: str, now: datetime = None) -> int:
             days_offset    = trading_days.index(pred_day)
             is_expiry_pred = (pred_day == expiry_date)
 
+            # T is fixed per prediction day — compute once outside contract loop
+            # Uses calendar convention matching Dhan's IV calibration
+            t_years = pricing.t_years_for_prediction(pred_day, expiry_date)
+
             for pct in prediction_pcts:
                 predicted_spot = round(spot * (1 + pct), 2)
 
+                # IV for this predicted spot — also fixed per pct, compute once
+                iv_ce = pricing.select_iv_for_predicted_spot(predicted_spot, "CE", contracts)
+                iv_pe = pricing.select_iv_for_predicted_spot(predicted_spot, "PE", contracts)
+
                 for con in contracts:
-                    # Find IV for this predicted spot
-                    iv_to_use = pricing.select_iv_for_predicted_spot(
-                        predicted_spot,
-                        con["option_type"],
-                        contracts,
-                    )
+                    iv_to_use = iv_ce if con["option_type"] == "CE" else iv_pe
 
                     # Compute projected LTP
                     if is_expiry_pred:
@@ -166,13 +169,12 @@ def run_snapshot(underlying: str, now: datetime = None) -> int:
                             con["option_type"], predicted_spot, con["strike"]
                         )
                     else:
-                        t_mins = pricing.minutes_to_eod(now, pred_day)
                         result = pricing.bsm_price(
                             con["option_type"],
                             predicted_spot,
                             con["strike"],
                             iv_to_use or con["iv"] or 0.15,
-                            t_mins,
+                            t_years,
                         )
 
                     pnl_long, pnl_short = pricing.compute_pnl(
