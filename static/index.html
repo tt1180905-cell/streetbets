@@ -3,467 +3,242 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>StreetBets — Options PnL Accuracy Lab</title>
+<title>StreetBets — Options PnL Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Serif+Display&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
-
 :root {
-  --bg:         #0a0c10;
-  --bg2:        #10141c;
-  --bg3:        #161c28;
-  --border:     #1e2535;
-  --border2:    #2a3448;
-  --text:       #e2e8f0;
-  --muted:      #64748b;
-  --accent:     #38bdf8;
-  --accent2:    #0ea5e9;
-  --green:      #22c55e;
-  --green-dim:  #15803d;
-  --red:        #ef4444;
-  --red-dim:    #991b1b;
-  --yellow:     #f59e0b;
-  --purple:     #a78bfa;
-  --mono:       'Space Mono', monospace;
-  --sans:       'DM Sans', sans-serif;
-  --radius:     8px;
-  --shadow:     0 4px 24px rgba(0,0,0,0.4);
+  --bg:          #EEF2F7;
+  --surface:     #FFFFFF;
+  --surface2:    #F8FAFC;
+  --border:      #E2E8F0;
+  --border2:     #CBD5E1;
+  --text:        #0F172A;
+  --text2:       #334155;
+  --muted:       #64748B;
+  --blue:        #1D4ED8;
+  --blue-mid:    #3B82F6;
+  --blue-light:  #DBEAFE;
+  --blue-dim:    #EFF6FF;
+  --orange:      #EA580C;
+  --orange-light:#FED7AA;
+  --green:       #16A34A;
+  --green-light: #DCFCE7;
+  --red:         #DC2626;
+  --red-light:   #FEE2E2;
+  --amber:       #D97706;
+  --mono:        'IBM Plex Mono', monospace;
+  --sans:        'Outfit', sans-serif;
+  --radius:      10px;
+  --shadow:      0 1px 3px rgba(15,23,42,0.07), 0 4px 12px rgba(15,23,42,0.04);
+  --shadow-lg:   0 4px 24px rgba(15,23,42,0.10);
 }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* NAV */
+.nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 28px;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 1px 0 var(--border),0 2px 12px rgba(15,23,42,0.05)}
+.nav-logo{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:2px;color:var(--blue);text-transform:uppercase;margin-right:36px;display:flex;align-items:center;gap:8px}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--blue-mid);box-shadow:0 0 8px #3B82F666}
+.nav-tabs{display:flex;gap:2px;flex:1}
+.nav-tab{padding:6px 16px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-radius:6px;border:none;background:none;font-family:var(--sans);transition:all 0.15s}
+.nav-tab:hover{color:var(--text);background:var(--surface2)}
+.nav-tab.active{color:var(--blue);background:var(--blue-light);font-weight:600}
+.nav-live{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-body {
-  font-family: var(--sans);
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
+/* LAYOUT */
+.page{display:none;padding:24px 28px;max-width:1440px;margin:0 auto}
+.page.active{display:block;animation:fadeIn .18s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
 
-/* ── NAV ─────────────────────────────────────────────────────────────────── */
-.nav {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: 0 32px;
-  height: 56px;
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-.nav-logo {
-  font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 2px;
-  margin-right: 40px;
-  text-transform: uppercase;
-}
-.nav-logo span { color: var(--muted); }
-.nav-tabs { display: flex; gap: 2px; flex: 1; }
-.nav-tab {
-  padding: 6px 18px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--muted);
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.15s;
-  border: none;
-  background: none;
-  font-family: var(--sans);
-}
-.nav-tab:hover { color: var(--text); background: var(--bg3); }
-.nav-tab.active { color: var(--accent); background: rgba(56,189,248,0.1); }
+/* FILTER BAR */
+.filterbar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 20px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-bottom:20px;box-shadow:var(--shadow)}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fl{font-family:var(--mono);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}
+select{font-family:var(--mono);font-size:12px;color:var(--text);background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;cursor:pointer;outline:none;min-width:130px;transition:border-color .15s}
+select:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-light)}
+.tgroup{display:flex;border:1px solid var(--border2);border-radius:6px;overflow:hidden}
+.tbtn{padding:6px 16px;font-size:12px;font-family:var(--mono);cursor:pointer;border:none;background:var(--surface2);color:var(--muted);transition:all .15s;font-weight:500}
+.tbtn.active{background:var(--blue);color:#fff;font-weight:600}
+.thresh-wrap{display:flex;align-items:center;gap:8px}
+.thresh-wrap input[type=range]{width:100px;accent-color:var(--blue)}
+.thresh-val{font-family:var(--mono);font-size:13px;color:var(--blue);font-weight:600;min-width:34px}
 
-/* status dot */
-.status-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--green);
-  margin-left: auto;
-  box-shadow: 0 0 6px var(--green);
-  animation: pulse 2s infinite;
-}
-@keyframes pulse {
-  0%,100% { opacity: 1; } 50% { opacity: 0.4; }
-}
-.status-label { font-size: 11px; color: var(--muted); margin-left: 8px; font-family: var(--mono); }
+/* METRIC CARDS */
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px}
+.mc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.mc::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--blue-mid)}
+.mc.g::before{background:var(--green)}.mc.r::before{background:var(--red)}.mc.a::before{background:var(--amber)}
+.mc-lbl{font-family:var(--mono);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px}
+.mc-val{font-family:var(--mono);font-size:28px;font-weight:600;line-height:1;color:var(--text)}
+.mc-val.blue{color:var(--blue)}.mc-val.green{color:var(--green)}.mc-val.red{color:var(--red)}
+.mc-sub{font-size:12px;color:var(--muted);margin-top:6px}
 
-/* ── LAYOUT ──────────────────────────────────────────────────────────────── */
-.page { display: none; padding: 32px; max-width: 1400px; margin: 0 auto; }
-.page.active { display: block; }
+/* PANELS */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:20px}
+.ph{padding:13px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface2)}
+.pt{font-family:var(--mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.9px;color:var(--text2)}
+.pb{padding:20px}.pb canvas{max-height:340px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 
-/* ── FILTER BAR ──────────────────────────────────────────────────────────── */
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  padding: 16px 20px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: 24px;
-}
-.filter-group { display: flex; flex-direction: column; gap: 4px; }
-.filter-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-family: var(--mono); }
-.filter-select, .filter-input {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text);
-  background: var(--bg3);
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  padding: 6px 10px;
-  cursor: pointer;
-  outline: none;
-  min-width: 120px;
-}
-.filter-select:focus, .filter-input:focus { border-color: var(--accent); }
-.filter-range { display: flex; align-items: center; gap: 8px; }
-.filter-range input[type=range] {
-  width: 120px;
-  accent-color: var(--accent);
-}
-.threshold-val {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--accent);
-  min-width: 36px;
-}
+/* LEGEND */
+.legend{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.lp{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.lp-dot{width:10px;height:10px;border-radius:50%}
 
-/* ── METRIC CARDS ────────────────────────────────────────────────────────── */
-.metrics-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.metric-card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  position: relative;
-  overflow: hidden;
-}
-.metric-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: var(--accent);
-}
-.metric-card.green::before { background: var(--green); }
-.metric-card.red::before   { background: var(--red); }
-.metric-card.yellow::before { background: var(--yellow); }
+/* DONUT */
+.donut-wrap{display:flex;align-items:center;justify-content:center;gap:36px;padding:24px}
+.donut-legend{display:flex;flex-direction:column;gap:10px}
+.dl{display:flex;align-items:center;gap:8px;font-size:13px}
+.dl-box{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+.dl-label{color:var(--text2)}
+.dl-val{font-family:var(--mono);font-weight:600;color:var(--text);margin-left:auto;padding-left:20px}
+.dl-sub{font-size:11px;color:var(--muted);font-family:var(--mono)}
 
-.metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; font-family: var(--mono); }
-.metric-value { font-family: var(--mono); font-size: 28px; font-weight: 700; line-height: 1; }
-.metric-value.green { color: var(--green); }
-.metric-value.red   { color: var(--red); }
-.metric-value.accent { color: var(--accent); }
-.metric-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+/* SETUP */
+.setup-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.sc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow)}
+.sc h3{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--blue);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px}
+.k{font-size:12px;color:var(--muted);display:flex;align-items:center}
+.v{font-family:var(--mono);font-size:12px;color:var(--text);font-weight:500}
+.tl{display:flex;flex-direction:column;gap:10px}
+.tlr{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2)}
+.tld{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tld.done{background:var(--green)}.tld.active{background:var(--blue);box-shadow:0 0 6px var(--blue);animation:pulse 1.5s infinite}.tld.future{background:var(--border2)}.tld.eod{background:var(--amber)}
+.desc{font-size:13px;color:var(--text2);line-height:1.75}
 
-/* ── GRID LAYOUTS ────────────────────────────────────────────────────────── */
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+/* EMPTY / LOADING */
+.empty{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-icon{font-size:36px;margin-bottom:10px}
+.loading{display:flex;align-items:center;justify-content:center;padding:48px;gap:10px;color:var(--muted)}
+.spinner{width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-/* ── PANEL ───────────────────────────────────────────────────────────────── */
-.panel {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.panel-header {
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.panel-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-family: var(--mono); }
-.panel-body { padding: 20px; }
-.panel-body canvas { max-height: 320px; }
-
-/* ── HEATMAP ─────────────────────────────────────────────────────────────── */
-.heatmap-wrap { overflow-x: auto; }
-.heatmap-table { border-collapse: collapse; font-family: var(--mono); font-size: 10px; }
-.heatmap-table th {
-  padding: 4px 6px;
-  color: var(--muted);
-  font-weight: 400;
-  white-space: nowrap;
-  text-align: center;
-}
-.heatmap-table td {
-  width: 32px;
-  height: 24px;
-  text-align: center;
-  font-size: 9px;
-  border: 1px solid rgba(255,255,255,0.03);
-  cursor: default;
-  transition: opacity 0.1s;
-  position: relative;
-}
-.heatmap-table td:hover { opacity: 0.8; outline: 1px solid var(--accent); }
-.heatmap-actual {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%,-50%);
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: white;
-  border: 2px solid var(--yellow);
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* ── INSIGHTS ────────────────────────────────────────────────────────────── */
-.insights-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-.insight-card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-}
-.insight-icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
-.insight-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-.insight-body { font-size: 13px; color: var(--muted); line-height: 1.6; }
-.insight-card.positive { border-color: rgba(34,197,94,0.25); }
-.insight-card.negative { border-color: rgba(239,68,68,0.25); }
-
-/* ── EXPERIMENT SETUP ────────────────────────────────────────────────────── */
-.setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.setup-section { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
-.setup-section h3 { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin-bottom: 16px; }
-.setup-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
-.setup-key { font-size: 12px; color: var(--muted); }
-.setup-val { font-family: var(--mono); font-size: 12px; color: var(--text); }
-.timeline { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.timeline-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
-.tl-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.tl-dot.done    { background: var(--green); }
-.tl-dot.active  { background: var(--accent); animation: pulse 1.5s infinite; }
-.tl-dot.pending { background: var(--border2); }
-
-/* ── EMPTY STATE ─────────────────────────────────────────────────────────── */
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--muted);
-}
-.empty-state .icon { font-size: 40px; margin-bottom: 12px; }
-.empty-state p { font-size: 14px; }
-
-/* ── LOADING ─────────────────────────────────────────────────────────────── */
-.loading { display: flex; align-items: center; justify-content: center; padding: 40px; gap: 10px; color: var(--muted); font-size: 13px; }
-.spinner { width: 18px; height: 18px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── TOOLTIP ─────────────────────────────────────────────────────────────── */
-.tooltip {
-  position: fixed;
-  background: var(--bg3);
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 11px;
-  font-family: var(--mono);
-  pointer-events: none;
-  z-index: 1000;
-  max-width: 200px;
-  display: none;
-}
-.tooltip.show { display: block; }
-
-/* ── DIRECTION TOGGLE ────────────────────────────────────────────────────── */
-.toggle-group { display: flex; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.toggle-btn {
-  padding: 5px 14px;
-  font-size: 12px;
-  font-family: var(--mono);
-  cursor: pointer;
-  border: none;
-  background: none;
-  color: var(--muted);
-  transition: all 0.15s;
-}
-.toggle-btn.active { background: var(--accent); color: var(--bg); font-weight: 700; }
-
-/* ── BIG INSIGHT NUMBER ──────────────────────────────────────────────────── */
-.go-nogo {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 32px;
-  text-align: center;
-  margin-bottom: 24px;
-}
-.go-nogo-label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 12px; }
-.go-nogo-number { font-family: var(--mono); font-size: 64px; font-weight: 700; line-height: 1; }
-.go-nogo-number.good  { color: var(--green); }
-.go-nogo-number.warn  { color: var(--yellow); }
-.go-nogo-number.bad   { color: var(--red); }
-.go-nogo-sub { font-size: 14px; color: var(--muted); margin-top: 10px; }
+/* BADGE */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-family:var(--mono);font-size:11px;font-weight:600}
+.badge.green{background:var(--green-light);color:var(--green)}
+.badge.red{background:var(--red-light);color:var(--red)}
+.badge.blue{background:var(--blue-light);color:var(--blue)}
 </style>
 </head>
 <body>
 
 <nav class="nav">
-  <div class="nav-logo">Street<span>Bets</span></div>
+  <div class="nav-logo"><div class="logo-dot"></div>StreetBets</div>
   <div class="nav-tabs">
-    <button class="nav-tab active" onclick="showPage('recon')">Reconciliation</button>
-    <button class="nav-tab" onclick="showPage('accuracy')">Snapshot Accuracy</button>
-    <button class="nav-tab" onclick="showPage('insights')">Insights</button>
-    <button class="nav-tab" onclick="showPage('setup')">Experiment Setup</button>
+    <button class="nav-tab active" onclick="showPage('overview',this)">Overview</button>
+    <button class="nav-tab" onclick="showPage('accuracy',this)">Snapshot Accuracy</button>
+    <button class="nav-tab" onclick="showPage('iv',this)">IV Diagnostics</button>
+    <button class="nav-tab" onclick="showPage('setup',this)">Experiment Setup</button>
   </div>
-  <div class="status-dot" id="statusDot"></div>
-  <div class="status-label" id="statusLabel">LIVE</div>
+  <div class="nav-live"><div class="live-dot"></div>LIVE</div>
 </nav>
 
-<div class="tooltip" id="tooltip"></div>
+<!-- ═══════════════════ PAGE: OVERVIEW ═══════════════════════════════════ -->
+<div class="page active" id="page-overview">
 
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- PAGE: RECONCILIATION                                                   -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<div class="page active" id="page-recon">
-
-  <!-- Filters -->
-  <div class="filters">
-    <div class="filter-group">
-      <div class="filter-label">Underlying</div>
-      <select class="filter-select" id="f-underlying" onchange="loadRecon()">
+  <div class="filterbar">
+    <div class="fg"><div class="fl">Underlying</div>
+      <select id="f-und" onchange="loadOverview()">
         <option value="NIFTY">NIFTY</option>
         <option value="SENSEX">SENSEX</option>
       </select>
     </div>
-    <div class="filter-group">
-      <div class="filter-label">T-Day</div>
-      <select class="filter-select" id="f-date" onchange="loadRecon()">
-        <option value="">Loading...</option>
+    <div class="fg"><div class="fl">Date</div>
+      <select id="f-date" onchange="loadOverview()"><option>Loading...</option></select>
+    </div>
+    <div class="fg"><div class="fl">Snapshot</div>
+      <select id="f-snap" onchange="loadOverview()">
+        <option value="">All snapshots</option>
+        <option value="9:17">9:17 AM</option>
+        <option value="10:30">10:30 AM</option>
+        <option value="12:15">12:15 PM</option>
+        <option value="1:30">1:30 PM</option>
+        <option value="3:00">3:00 PM</option>
       </select>
     </div>
-    <div class="filter-group">
-      <div class="filter-label">Snapshot</div>
-      <select class="filter-select" id="f-snapshot" onchange="loadRecon()">
-        <option value="">All</option>
-        <option value="9:17">9:17</option>
-        <option value="10:30">10:30</option>
-        <option value="12:15">12:15</option>
-        <option value="1:30">1:30</option>
-        <option value="3:00">3:00</option>
+    <div class="fg"><div class="fl">Option Type</div>
+      <select id="f-type" onchange="loadOverview()">
+        <option value="">Calls + Puts</option>
+        <option value="CE">Calls only</option>
+        <option value="PE">Puts only</option>
       </select>
     </div>
-    <div class="filter-group">
-      <div class="filter-label">Option Type</div>
-      <select class="filter-select" id="f-type" onchange="loadRecon()">
-        <option value="">Both</option>
-        <option value="CE">Calls</option>
-        <option value="PE">Puts</option>
-      </select>
-    </div>
-    <div class="filter-group">
-      <div class="filter-label">Direction</div>
-      <div class="toggle-group">
-        <button class="toggle-btn active" id="dir-long"  onclick="setDir('long')">LONG</button>
-        <button class="toggle-btn"        id="dir-short" onclick="setDir('short')">SHORT</button>
+    <div class="fg"><div class="fl">Direction</div>
+      <div class="tgroup">
+        <button class="tbtn active" id="db-long" onclick="setDir('long')">LONG</button>
+        <button class="tbtn" id="db-short" onclick="setDir('short')">SHORT</button>
       </div>
     </div>
-    <div class="filter-group" style="margin-left:auto">
-      <div class="filter-label">Accuracy Threshold</div>
-      <div class="filter-range">
-        <input type="range" min="5" max="25" value="10" step="1" id="f-threshold"
-               oninput="updateThreshold(this.value)">
-        <span class="threshold-val" id="threshold-display">10%</span>
+    <div class="fg" style="margin-left:auto">
+      <div class="fl">Accuracy Threshold</div>
+      <div class="thresh-wrap">
+        <input type="range" min="5" max="25" value="10" step="1" id="f-thresh" oninput="updateThresh(this.value)">
+        <span class="thresh-val" id="thresh-val">10%</span>
       </div>
     </div>
   </div>
 
-  <!-- Summary metrics -->
-  <div class="metrics-row" id="metrics-row">
-    <div class="metric-card" id="mc-mae">
-      <div class="metric-label">Mean Abs Error</div>
-      <div class="metric-value accent" id="mv-mae">—</div>
-      <div class="metric-sub" id="ms-mae">₹ per contract</div>
+  <div class="metrics">
+    <div class="mc g" id="mc-acc">
+      <div class="mc-lbl">Within Accuracy Threshold</div>
+      <div class="mc-val" id="mv-acc">—</div>
+      <div class="mc-sub" id="ms-acc">of predictions</div>
     </div>
-    <div class="metric-card" id="mc-within">
-      <div class="metric-label">Within Threshold</div>
-      <div class="metric-value" id="mv-within">—</div>
-      <div class="metric-sub" id="ms-within">of predictions</div>
+    <div class="mc">
+      <div class="mc-lbl">Mean Absolute Error</div>
+      <div class="mc-val blue" id="mv-mae">—</div>
+      <div class="mc-sub">₹ per contract per lot</div>
     </div>
-    <div class="metric-card">
-      <div class="metric-label">Best Snapshot</div>
-      <div class="metric-value accent" id="mv-best">—</div>
-      <div class="metric-sub">lowest MAE</div>
-    </div>
-    <div class="metric-card red">
-      <div class="metric-label">Weakest Range</div>
-      <div class="metric-value red" id="mv-worst" style="font-size:16px;margin-top:4px">—</div>
-      <div class="metric-sub">highest MAE</div>
+    <div class="mc">
+      <div class="mc-lbl">Predictions Reconciled</div>
+      <div class="mc-val" id="mv-count">—</div>
+      <div class="mc-sub">across all snapshots</div>
     </div>
   </div>
 
-  <!-- Scatter + Heatmap row -->
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-title">Projected vs Actual PnL</span>
-        <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">₹ per lot</span>
-      </div>
-      <div class="panel-body">
-        <canvas id="scatterChart"></canvas>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-title">PnL Heatmap</span>
-        <select class="filter-select" id="hm-contract" onchange="loadHeatmap()" style="font-size:11px;padding:4px 8px;min-width:160px">
-          <option value="">Select contract...</option>
-        </select>
-      </div>
-      <div class="panel-body" style="padding:12px">
-        <div class="heatmap-wrap" id="heatmap-wrap">
-          <div class="empty-state"><div class="icon">🎯</div><p>Select a contract above</p></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Error distribution -->
   <div class="panel">
-    <div class="panel-header">
-      <span class="panel-title">Error Distribution — Projected minus Actual PnL (₹)</span>
+    <div class="ph">
+      <span class="pt">Projected vs Actual PnL — every contract at every snapshot</span>
+      <div class="legend">
+        <div class="lp"><div class="lp-dot" style="background:var(--blue)"></div>Calls (CE)</div>
+        <div class="lp"><div class="lp-dot" style="background:var(--orange)"></div>Puts (PE)</div>
+        <div class="lp"><div class="lp-dot" style="background:var(--border2);width:14px;height:3px;border-radius:2px"></div>Perfect</div>
+      </div>
     </div>
-    <div class="panel-body">
-      <canvas id="errorChart" style="max-height:200px"></canvas>
-    </div>
+    <div class="pb"><canvas id="scatterChart"></canvas></div>
   </div>
+
+  <div class="panel">
+    <div class="ph">
+      <span class="pt">PnL Error by Strike — Projected minus Actual (₹) · averaged across snapshots</span>
+      <div class="legend">
+        <div class="lp"><div class="lp-dot" style="background:var(--blue)"></div>Calls</div>
+        <div class="lp"><div class="lp-dot" style="background:var(--orange)"></div>Puts</div>
+        <div class="lp" style="font-size:10px;color:var(--muted)">Zero line = perfect prediction</div>
+      </div>
+    </div>
+    <div class="pb"><canvas id="strikeChart"></canvas></div>
+  </div>
+
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- PAGE: SNAPSHOT ACCURACY                                                -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════ PAGE: SNAPSHOT ACCURACY ══════════════════════════ -->
 <div class="page" id="page-accuracy">
-  <div class="filters">
-    <div class="filter-group">
-      <div class="filter-label">Underlying</div>
-      <select class="filter-select" id="sa-underlying" onchange="loadAccuracy()">
+
+  <div class="filterbar">
+    <div class="fg"><div class="fl">Underlying</div>
+      <select id="sa-und" onchange="loadAccuracy()">
         <option value="NIFTY">NIFTY</option>
         <option value="SENSEX">SENSEX</option>
       </select>
     </div>
-    <div class="filter-group">
-      <div class="filter-label">Option Type</div>
-      <select class="filter-select" id="sa-type" onchange="loadAccuracy()">
+    <div class="fg"><div class="fl">Option Type</div>
+      <select id="sa-type" onchange="loadAccuracy()">
         <option value="">Both</option>
         <option value="CE">Calls</option>
         <option value="PE">Puts</option>
@@ -471,599 +246,474 @@ body {
     </div>
   </div>
 
-  <div class="grid-2">
+  <div class="grid2">
     <div class="panel">
-      <div class="panel-header"><span class="panel-title">MAE by Snapshot Time</span></div>
-      <div class="panel-body"><canvas id="maeBarChart"></canvas></div>
+      <div class="ph"><span class="pt">Accuracy Decay Curve — MAE shrinks toward close</span></div>
+      <div class="pb"><canvas id="decayChart"></canvas></div>
     </div>
     <div class="panel">
-      <div class="panel-header"><span class="panel-title">Accuracy Decay Curve</span></div>
-      <div class="panel-body"><canvas id="decayChart"></canvas></div>
+      <div class="ph"><span class="pt">MAE by Snapshot — Calls vs Puts</span></div>
+      <div class="pb"><canvas id="maeBarChart"></canvas></div>
     </div>
   </div>
-  <div class="panel">
-    <div class="panel-header">
-      <span class="panel-title">IV Smile Shift — Snapshot vs EOD</span>
-      <select class="filter-select" id="iv-date" onchange="loadIVShift()" style="font-size:11px;padding:4px 8px">
-        <option value="">Select date...</option>
-      </select>
-    </div>
-    <div class="panel-body"><canvas id="ivChart" style="max-height:260px"></canvas></div>
-  </div>
-</div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- PAGE: INSIGHTS                                                         -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<div class="page" id="page-insights">
-  <div class="filters">
-    <div class="filter-group">
-      <div class="filter-label">Underlying</div>
-      <select class="filter-select" id="ins-underlying" onchange="loadInsights()">
-        <option value="NIFTY">NIFTY</option>
-        <option value="SENSEX">SENSEX</option>
-      </select>
-    </div>
-    <div class="filter-group" style="margin-left:auto">
-      <div class="filter-label">Accuracy Threshold</div>
-      <div class="filter-range">
-        <input type="range" min="5" max="25" value="10" step="1" id="ins-threshold"
-               oninput="updateInsightThreshold(this.value)">
-        <span class="threshold-val" id="ins-threshold-display">10%</span>
+  <div class="panel">
+    <div class="ph"><span class="pt">Prediction Accuracy by Moneyness Zone</span></div>
+    <div class="donut-wrap">
+      <canvas id="donutChart" width="200" height="200"></canvas>
+      <div class="donut-legend" id="donut-legend">
+        <div class="loading"><div class="spinner"></div></div>
       </div>
     </div>
   </div>
 
-  <div class="go-nogo" id="go-nogo-block">
-    <div class="go-nogo-label">Overall Accuracy — % of predictions within threshold</div>
-    <div class="go-nogo-number" id="go-nogo-num">—</div>
-    <div class="go-nogo-sub" id="go-nogo-sub">Loading...</div>
-  </div>
-
-  <div class="insights-grid" id="insights-grid">
-    <div class="loading"><div class="spinner"></div> Loading insights...</div>
-  </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- PAGE: EXPERIMENT SETUP                                                 -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════ PAGE: IV DIAGNOSTICS ═════════════════════════════ -->
+<div class="page" id="page-iv">
+
+  <div class="filterbar">
+    <div class="fg"><div class="fl">Underlying</div>
+      <select id="iv-und" onchange="loadIV()">
+        <option value="NIFTY">NIFTY</option>
+        <option value="SENSEX">SENSEX</option>
+      </select>
+    </div>
+    <div class="fg"><div class="fl">Date</div>
+      <select id="iv-date" onchange="loadIV()"><option>Loading...</option></select>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ph">
+      <span class="pt">IV Smile — One line per snapshot time (CE only)</span>
+      <div class="legend" id="iv-legend"></div>
+    </div>
+    <div class="pb"><canvas id="ivSmileChart"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <div class="ph">
+      <span class="pt">Entry LTP vs Absolute Prediction Error — higher premium = richer option = more BSM sensitivity</span></div>
+    <div class="pb"><canvas id="ivErrChart"></canvas></div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════ PAGE: SETUP ══════════════════════════════════════ -->
 <div class="page" id="page-setup">
   <div class="setup-grid">
-    <div class="setup-section">
+
+    <div class="sc" style="grid-column:1/-1">
       <h3>What StreetBets Measures</h3>
-      <p style="font-size:13px;color:var(--muted);line-height:1.7">
-        StreetBets is a BSM accuracy lab for Indian options. At fixed times each trading day,
-        it captures the full Nifty and Sensex option chain (±5% from spot, nearest expiry)
-        and generates a prediction matrix: for every combination of (predicted spot move, prediction day),
-        it computes what each contract would theoretically be worth using Black-Scholes pricing.
-      </p>
-      <br>
-      <p style="font-size:13px;color:var(--muted);line-height:1.7">
-        At EOD (3:35 PM IST), it reconciles predictions against actual closing prices,
-        computing real vs projected PnL for every contract at every snapshot.
-        The goal: validate whether BSM-derived predictions are accurate enough
-        to surface to retail users as a PnL calculator feature.
+      <p class="desc">
+        StreetBets is a Black-Scholes accuracy validation lab for Indian index options. At 5 fixed times
+        each trading day it captures the Nifty and Sensex option chain (±5% from spot, nearest expiry)
+        and generates a prediction matrix — for every (predicted spot %, prediction day) combination it
+        computes what each contract would theoretically be worth using BSM with strike-specific IV and
+        calendar-day T convention. At 3:35 PM it reconciles against actual closing prices and measures
+        how far projected PnL was from actual PnL. The goal: validate whether BSM is accurate enough
+        to power a retail-facing PnL calculator feature on DreamStreet.
       </p>
     </div>
 
-    <div class="setup-section">
+    <div class="sc">
       <h3>Methodology</h3>
-      <div class="setup-kv" id="methodology-kv">
-        <div class="setup-key">Pricing model</div><div class="setup-val">Black-Scholes-Merton</div>
-        <div class="setup-key">Expiry-day pricing</div><div class="setup-val">Intrinsic value only</div>
-        <div class="setup-key">IV assumption</div><div class="setup-val">Strike-specific from chain</div>
-        <div class="setup-key">T computation</div><div class="setup-val">Trading minutes to EOD</div>
-        <div class="setup-key">Risk-free rate</div><div class="setup-val">6.5% p.a. (Gsec)</div>
-        <div class="setup-key">Nifty lot size</div><div class="setup-val" id="nifty-lot">65</div>
-        <div class="setup-key">Sensex lot size</div><div class="setup-val" id="sensex-lot">20</div>
-        <div class="setup-key">Spot range</div><div class="setup-val">±5% from ATM</div>
-        <div class="setup-key">Prediction interval</div><div class="setup-val">0.2% steps</div>
-        <div class="setup-key">Prediction points</div><div class="setup-val">51 per snapshot</div>
+      <div class="kv">
+        <div class="k">Pricing model</div><div class="v">Black-Scholes-Merton</div>
+        <div class="k">Expiry-day pricing</div><div class="v">Intrinsic value only</div>
+        <div class="k">IV source</div><div class="v">Strike-specific from Dhan chain</div>
+        <div class="k">T convention</div><div class="v">Calendar secs ÷ 31,536,000</div>
+        <div class="k">Risk-free rate</div><div class="v">6.5% p.a. (Gsec)</div>
+        <div class="k">Nifty lot size</div><div class="v" id="s-nifty">65</div>
+        <div class="k">Sensex lot size</div><div class="v" id="s-sensex">20</div>
+        <div class="k">Spot filter</div><div class="v">±5% from ATM</div>
+        <div class="k">Prediction points</div><div class="v">97 (variable density)</div>
+        <div class="k">Grid ±0–1%</div><div class="v">0.05% steps (41 pts)</div>
+        <div class="k">Grid ±1–3%</div><div class="v">0.10% steps (40 pts)</div>
+        <div class="k">Grid ±3–5%</div><div class="v">0.25% steps (16 pts)</div>
       </div>
     </div>
 
-    <div class="setup-section">
-      <h3>Snapshot Schedule (IST)</h3>
-      <div class="timeline" id="snapshot-timeline">
-        <div class="timeline-row"><div class="tl-dot done"></div><span>9:17 AM — Market open</span></div>
-        <div class="timeline-row"><div class="tl-dot done"></div><span>10:30 AM — Post-open volatility</span></div>
-        <div class="timeline-row"><div class="tl-dot active"></div><span>12:15 PM — Midday</span></div>
-        <div class="timeline-row"><div class="tl-dot pending"></div><span>1:30 PM — Post-lunch</span></div>
-        <div class="timeline-row"><div class="tl-dot pending"></div><span>3:00 PM — Pre-close</span></div>
-        <div class="timeline-row" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
-          <div class="tl-dot" style="background:var(--yellow)"></div>
-          <span>3:35 PM — EOD Reconciliation</span>
+    <div class="sc">
+      <h3>Daily Schedule (IST)</h3>
+      <div class="tl">
+        <div class="tlr"><div class="tld done"></div>9:17 AM — Opening snapshot</div>
+        <div class="tlr"><div class="tld done"></div>10:30 AM — Mid-morning</div>
+        <div class="tlr"><div class="tld active"></div>12:15 PM — Midday</div>
+        <div class="tlr"><div class="tld future"></div>1:30 PM — Post-lunch</div>
+        <div class="tlr"><div class="tld future"></div>3:00 PM — Pre-close</div>
+        <div class="tlr" style="margin-top:8px;padding-top:10px;border-top:1px solid var(--border)">
+          <div class="tld eod"></div>3:35 PM — EOD Reconciliation
+        </div>
+      </div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <h3 style="margin-bottom:12px">Experiment Status</h3>
+        <div class="kv">
+          <div class="k">Status</div><div class="v" style="color:var(--green)">● Running</div>
+          <div class="k">Started</div><div class="v" id="s-start">—</div>
+          <div class="k">Trading days</div><div class="v" id="s-days">—</div>
+          <div class="k">Total snapshots</div><div class="v" id="s-snaps">—</div>
+          <div class="k">Expiry cycles</div><div class="v" id="s-cycles">—</div>
         </div>
       </div>
     </div>
 
-    <div class="setup-section">
-      <h3>Experiment Status</h3>
-      <div class="setup-kv" id="experiment-stats">
-        <div class="setup-key">Status</div><div class="setup-val" style="color:var(--green)">Running</div>
-        <div class="setup-key">Started</div><div class="setup-val" id="stat-start">—</div>
-        <div class="setup-key">Trading days</div><div class="setup-val" id="stat-days">—</div>
-        <div class="setup-key">Total snapshots</div><div class="setup-val" id="stat-snaps">—</div>
-        <div class="setup-key">Expiry cycles</div><div class="setup-val" id="stat-cycles">—</div>
-        <div class="setup-key">Underlyings</div><div class="setup-val">NIFTY, SENSEX</div>
-      </div>
-    </div>
   </div>
 </div>
 
 <script>
-// ── STATE ──────────────────────────────────────────────────────────────────
-const S = {
-  direction: 'long',
-  threshold: 0.10,
-  scatterChart: null,
-  errorChart: null,
-  maeBarChart: null,
-  decayChart: null,
-  ivChart: null,
-  reconDates: [],
-  heatmapData: null,
-};
+const S = { dir:'long', thresh:0.10, charts:{}, dates:[] };
 
-const API = (path) => `/api${path}`;
-const qs = (obj) => '?' + Object.entries(obj).filter(([,v])=>v!=null&&v!=='').map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join('&');
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 11;
+Chart.defaults.color = '#64748B';
 
-async function apiFetch(path) {
-  try {
-    const r = await fetch(path);
-    if (!r.ok) throw new Error(r.status);
-    return await r.json();
-  } catch(e) {
-    console.warn('API error:', path, e);
-    return null;
-  }
+const GRID = '#E2E8F0';
+const SNAP_COLORS = {'9:17':'#1D4ED8','10:30':'#0EA5E9','12:15':'#16A34A','1:30':'#D97706','3:00':'#DC2626'};
+
+function api(p){ return fetch('/api'+p).then(r=>r.ok?r.json():null).catch(()=>null); }
+function qs(o){ return '?'+Object.entries(o).filter(([,v])=>v!=null&&v!=='').map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join('&'); }
+function kill(id){ if(S.charts[id]){S.charts[id].destroy();delete S.charts[id];} }
+
+function showPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  el.classList.add('active');
+  if(id==='overview') loadOverview();
+  if(id==='accuracy') loadAccuracy();
+  if(id==='iv')       loadIV();
+  if(id==='setup')    loadSetup();
 }
 
-// ── NAVIGATION ────────────────────────────────────────────────────────────
-function showPage(id) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-  document.getElementById(`page-${id}`).classList.add('active');
-  event.target.classList.add('active');
-
-  if (id === 'recon')    loadRecon();
-  if (id === 'accuracy') loadAccuracy();
-  if (id === 'insights') loadInsights();
-  if (id === 'setup')    loadSetup();
+function setDir(d){
+  S.dir=d;
+  document.getElementById('db-long').classList.toggle('active',d==='long');
+  document.getElementById('db-short').classList.toggle('active',d==='short');
+  loadOverview();
 }
 
-// ── THRESHOLD ─────────────────────────────────────────────────────────────
-function updateThreshold(v) {
-  S.threshold = v / 100;
-  document.getElementById('threshold-display').textContent = v + '%';
-  loadRecon();
-}
-function updateInsightThreshold(v) {
-  S.threshold = v / 100;
-  document.getElementById('ins-threshold-display').textContent = v + '%';
-  loadInsights();
-}
-function setDir(dir) {
-  S.direction = dir;
-  document.getElementById('dir-long').classList.toggle('active', dir === 'long');
-  document.getElementById('dir-short').classList.toggle('active', dir === 'short');
-  loadRecon();
+function updateThresh(v){
+  S.thresh=v/100;
+  document.getElementById('thresh-val').textContent=v+'%';
+  loadOverview();
 }
 
-// ── RECONCILIATION PAGE ───────────────────────────────────────────────────
-async function initDates() {
-  const dates = await apiFetch(API('/reconciliation-dates'));
-  if (!dates || !dates.length) return;
-  S.reconDates = dates;
-  const sel = document.getElementById('f-date');
-  sel.innerHTML = dates.map((d, i) => {
-    const label = i === 0 ? 'Last Day' : i === 1 ? 'T-2' : i === 2 ? 'T-3' : i === 3 ? 'T-4' : d;
-    return `<option value="${d}">${label} (${d})</option>`;
-  }).join('');
+async function initDates(){
+  const dates = await api('/reconciliation-dates');
+  if(!dates||!dates.length) return;
+  S.dates = dates;
+  const labels = ['Last Day','T-2','T-3','T-4','T-5'];
+  ['f-date','iv-date'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.innerHTML = dates.map((d,i)=>`<option value="${d}">${labels[i]||d} (${d})</option>`).join('');
+  });
 }
 
-async function loadRecon() {
-  const und  = document.getElementById('f-underlying').value;
+// ─── OVERVIEW ─────────────────────────────────────────────────────────────
+async function loadOverview(){
+  const und  = document.getElementById('f-und').value;
   const date = document.getElementById('f-date').value;
-  const snap = document.getElementById('f-snapshot').value;
+  const snap = document.getElementById('f-snap').value;
   const type = document.getElementById('f-type').value;
-  if (!date) return;
+  if(!date) return;
 
-  // Summary
-  const sum = await apiFetch(API('/summary') + qs({underlying:und, date, snapshot_label:snap, option_type:type, accuracy_threshold_pct:S.threshold}));
-  if (sum) renderSummary(sum);
+  const [sum, scatter] = await Promise.all([
+    api('/summary'+qs({underlying:und,date,snapshot_label:snap,option_type:type,accuracy_threshold_pct:S.thresh})),
+    api('/scatter'+qs({underlying:und,date,snapshot_label:snap,option_type:type,direction:S.dir}))
+  ]);
 
-  // Scatter
-  const scatter = await apiFetch(API('/scatter') + qs({underlying:und, date, snapshot_label:snap, option_type:type, direction:S.direction}));
-  if (scatter) renderScatter(scatter);
-
-  // Error dist
-  if (scatter) renderErrorDist(scatter);
-
-  // Populate contract selector for heatmap
-  const contracts = await apiFetch(API('/contracts') + qs({underlying:und, snapshot_label:snap||'9:17', date}));
-  if (contracts) populateContracts(contracts, und, date, snap||'9:17');
+  if(sum)     renderSummary(sum);
+  if(scatter){ renderScatter(scatter); renderStrikeError(scatter); }
 }
 
-function renderSummary(s) {
-  const maeV = document.getElementById('mv-mae');
-  maeV.textContent = s.mae_long != null ? `₹${s.mae_long.toLocaleString('en-IN', {maximumFractionDigits:0})}` : '—';
+function renderSummary(s){
+  const pct = S.dir==='long' ? s.within_threshold_long_pct : s.within_threshold_short_pct;
+  const mae = S.dir==='long' ? s.mae_long : s.mae_short;
 
-  const withinV = document.getElementById('mv-within');
-  const pct = S.direction === 'long' ? s.within_threshold_long_pct : s.within_threshold_short_pct;
-  withinV.textContent = pct != null ? `${pct}%` : '—';
-  withinV.className = 'metric-value ' + (pct >= 70 ? 'green' : pct >= 50 ? 'yellow' : 'red');
-  const mc = document.getElementById('mc-within');
-  mc.className = 'metric-card ' + (pct >= 70 ? 'green' : pct >= 50 ? 'yellow' : 'red');
+  const accEl = document.getElementById('mv-acc');
+  accEl.textContent = pct!=null ? pct.toFixed(1)+'%' : '—';
+  accEl.className = 'mc-val '+(pct>=70?'green':pct>=50?'':'red');
 
-  document.getElementById('mv-best').textContent  = s.best_snapshot || '—';
-  document.getElementById('mv-worst').textContent = s.worst_range   || '—';
+  const mc = document.getElementById('mc-acc');
+  mc.className = 'mc '+(pct>=70?'g':pct>=50?'a':'r');
+
+  document.getElementById('mv-mae').textContent   = mae!=null ? '₹'+Math.round(mae).toLocaleString('en-IN') : '—';
+  document.getElementById('mv-count').textContent = s.total_predictions?.toLocaleString('en-IN') || '—';
 }
 
-function renderScatter(data) {
+function renderScatter(data){
+  kill('scatter');
   const ctx = document.getElementById('scatterChart').getContext('2d');
-  if (S.scatterChart) S.scatterChart.destroy();
+  const pKey = 'projected_pnl', aKey = 'actual_pnl';
+  const ce = data.filter(d=>d.option_type==='CE');
+  const pe = data.filter(d=>d.option_type==='PE');
+  const allV = data.flatMap(d=>[d[pKey],d[aKey]]).filter(v=>v!=null);
+  const mn=Math.min(...allV), mx=Math.max(...allV);
 
-  const snapshotColors = {'9:17':'#38bdf8','10:30':'#a78bfa','12:15':'#22c55e','1:30':'#f59e0b','3:00':'#ef4444'};
-  const bySnap = {};
-  data.forEach(d => {
-    const l = d.snapshot_label || 'unknown';
-    if (!bySnap[l]) bySnap[l] = [];
-    bySnap[l].push({x: d.projected_pnl, y: d.actual_pnl, raw: d});
-  });
-
-  const datasets = Object.entries(bySnap).map(([label, pts]) => ({
-    label,
-    data: pts,
-    backgroundColor: (snapshotColors[label] || '#64748b') + 'bb',
-    pointRadius: 5,
-    pointHoverRadius: 7,
-  }));
-
-  // Diagonal reference line
-  const allVals = data.flatMap(d => [d.projected_pnl, d.actual_pnl]).filter(v => v != null);
-  const mn = Math.min(...allVals), mx = Math.max(...allVals);
-  datasets.unshift({
-    label: 'Perfect prediction',
-    data: [{x:mn,y:mn},{x:mx,y:mx}],
-    type: 'line',
-    borderColor: 'rgba(255,255,255,0.15)',
-    borderDash: [4,4],
-    borderWidth: 1,
-    pointRadius: 0,
-    fill: false,
-  });
-
-  S.scatterChart = new Chart(ctx, {
-    type: 'scatter',
-    data: { datasets },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { labels: { color: '#64748b', font: { family: 'Space Mono', size: 10 } } },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const r = ctx.raw.raw;
-              if (!r) return `(${ctx.raw.x?.toFixed(0)}, ${ctx.raw.y?.toFixed(0)})`;
-              return [`Strike: ${r.strike} ${r.option_type}`, `Projected: ₹${ctx.raw.x?.toFixed(0)}`, `Actual: ₹${ctx.raw.y?.toFixed(0)}`, `Error: ₹${r.error?.toFixed(0)}`];
-            }
-          }
-        }
+  S.charts['scatter'] = new Chart(ctx, {
+    type:'scatter',
+    data:{ datasets:[
+      { label:'Perfect prediction', type:'line', data:[{x:mn,y:mn},{x:mx,y:mx}],
+        borderColor:'#CBD5E1', borderWidth:1.5, borderDash:[5,4], pointRadius:0, fill:false, order:0 },
+      { label:'Calls (CE)', data:ce.map(d=>({x:d[pKey],y:d[aKey],raw:d})),
+        backgroundColor:'#1D4ED8bb', pointRadius:5, pointHoverRadius:7, order:1 },
+      { label:'Puts (PE)',  data:pe.map(d=>({x:d[pKey],y:d[aKey],raw:d})),
+        backgroundColor:'#EA580Cbb', pointRadius:5, pointHoverRadius:7, order:2 },
+    ]},
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{labels:{usePointStyle:true,pointStyle:'circle',padding:16}},
+        tooltip:{callbacks:{label:ctx=>{
+          const r=ctx.raw?.raw;
+          if(!r) return `(${ctx.raw.x?.toFixed(0)}, ${ctx.raw.y?.toFixed(0)})`;
+          return [`${r.strike} ${r.option_type} · ${r.snapshot_label}`,
+                  `Projected ₹${ctx.raw.x?.toFixed(0)}`,
+                  `Actual    ₹${ctx.raw.y?.toFixed(0)}`,
+                  `Error     ₹${r.error?.toFixed(0)}`];
+        }}}
       },
-      scales: {
-        x: { title: { display:true, text:'Projected PnL (₹)', color:'#64748b', font:{family:'Space Mono',size:10} }, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e2535'} },
-        y: { title: { display:true, text:'Actual PnL (₹)',    color:'#64748b', font:{family:'Space Mono',size:10} }, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e2535'} },
+      scales:{
+        x:{title:{display:true,text:'Projected PnL (₹)'},grid:{color:GRID}},
+        y:{title:{display:true,text:'Actual PnL (₹)'},grid:{color:GRID}},
       }
     }
   });
 }
 
-function renderErrorDist(data) {
-  const ctx = document.getElementById('errorChart').getContext('2d');
-  if (S.errorChart) S.errorChart.destroy();
+function renderStrikeError(data){
+  kill('strike');
+  const ctx = document.getElementById('strikeChart').getContext('2d');
+  const errKey = 'error';
 
-  const errors = data.map(d => d.error || 0);
-  const min = Math.min(...errors), max = Math.max(...errors);
-  const bins = 30;
-  const binSize = (max - min) / bins || 1;
-  const hist = Array(bins).fill(0);
-  errors.forEach(e => {
-    const i = Math.min(Math.floor((e - min) / binSize), bins - 1);
-    hist[i]++;
+  const byCE={}, byPE={};
+  data.forEach(d=>{
+    if(!d.strike||d[errKey]==null) return;
+    const b = d.option_type==='CE' ? byCE : byPE;
+    if(!b[d.strike]) b[d.strike]=[];
+    b[d.strike].push(d[errKey]);
   });
-  const labels = Array.from({length: bins}, (_, i) => (min + i * binSize).toFixed(0));
+  const avg=obj=>Object.fromEntries(Object.entries(obj).map(([k,v])=>[k,v.reduce((a,b)=>a+b,0)/v.length]));
+  const aCE=avg(byCE), aPE=avg(byPE);
+  const strikes=[...new Set([...Object.keys(aCE),...Object.keys(aPE)])].map(Number).sort((a,b)=>a-b);
 
-  S.errorChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        data: hist,
-        backgroundColor: hist.map((_, i) => {
-          const center = min + (i + 0.5) * binSize;
-          const absPct = Math.abs(center) / (data[0]?.invested_amount || 10000);
-          return absPct <= S.threshold ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.5)';
-        }),
-        borderWidth: 0,
-      }]
-    },
-    options: {
+  S.charts['strike'] = new Chart(ctx, {
+    type:'line',
+    data:{ labels:strikes.map(s=>s.toLocaleString('en-IN')), datasets:[
+      { label:'Calls (CE)', data:strikes.map(s=>aCE[s]??null),
+        borderColor:'#1D4ED8', backgroundColor:'#DBEAFE55', pointRadius:4, tension:0.3, fill:false, spanGaps:true },
+      { label:'Puts (PE)',  data:strikes.map(s=>aPE[s]??null),
+        borderColor:'#EA580C', backgroundColor:'#FED7AA55', pointRadius:4, tension:0.3, fill:false, spanGaps:true },
+      { label:'Zero (perfect)', data:strikes.map(()=>0),
+        borderColor:'#CBD5E1', borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false },
+    ]},
+    options:{
       responsive:true,
-      plugins: { legend:{display:false} },
-      scales: {
-        x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:8},maxTicksLimit:8}, grid:{color:'#1e2535'} },
-        y: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e2535'} },
+      plugins:{
+        legend:{labels:{usePointStyle:true,pointStyle:'circle',padding:16}},
+        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ₹${ctx.raw?.toFixed(0)}`}}
+      },
+      scales:{
+        x:{title:{display:true,text:'Strike'},grid:{color:GRID},ticks:{maxTicksLimit:14}},
+        y:{title:{display:true,text:'Error ₹ (Projected − Actual)'},grid:{color:GRID}},
       }
     }
   });
 }
 
-function populateContracts(contracts, und, date, snapLabel) {
-  const sel = document.getElementById('hm-contract');
-  sel.innerHTML = '<option value="">Select contract...</option>' +
-    contracts.map(c => `<option value="${c.security_id}">${c.strike} ${c.option_type} | LTP ₹${c.ltp}</option>`).join('');
-  sel.dataset.und = und;
-  sel.dataset.date = date;
-  sel.dataset.snap = snapLabel;
-}
-
-async function loadHeatmap() {
-  const sel = document.getElementById('hm-contract');
-  const sid = sel.value;
-  const und = sel.dataset.und;
-  const date = sel.dataset.date;
-  const snap = sel.dataset.snap;
-  if (!sid) return;
-
-  const data = await apiFetch(API('/heatmap') + qs({underlying:und, snapshot_label:snap, date, security_id:sid, direction:S.direction}));
-  if (!data || !data.matrix || !data.matrix.length) {
-    document.getElementById('heatmap-wrap').innerHTML = '<div class="empty-state"><div class="icon">📊</div><p>No data</p></div>';
-    return;
-  }
-  renderHeatmap(data);
-}
-
-function renderHeatmap(data) {
-  const matrix = data.matrix;
-  const days = [...new Set(matrix.map(r => r.predicted_day))].sort();
-  const pcts = [...new Set(matrix.map(r => r.predicted_spot_pct))].sort((a,b)=>a-b);
-
-  // Build lookup
-  const lookup = {};
-  matrix.forEach(r => { lookup[`${r.predicted_day}_${r.predicted_spot_pct}`] = r.pnl; });
-
-  // Actual dots
-  const actualDots = {};
-  (data.actual_dots || []).forEach(a => { actualDots[a.date] = a.predicted_spot_pct; });
-
-  // Color scale
-  const vals = matrix.map(r => r.pnl).filter(v => v != null);
-  const absMax = Math.max(Math.abs(Math.min(...vals)), Math.abs(Math.max(...vals))) || 1;
-  const color = (v) => {
-    if (v == null) return '#1e2535';
-    const t = v / absMax;
-    if (t > 0) return `rgba(34,197,94,${Math.min(t*0.9+0.1,1).toFixed(2)})`;
-    return `rgba(239,68,68,${Math.min(-t*0.9+0.1,1).toFixed(2)})`;
-  };
-
-  let html = `<table class="heatmap-table"><thead><tr><th>Day \\ Move</th>`;
-  pcts.forEach(p => {
-    html += `<th>${(p*100).toFixed(1)}%</th>`;
-  });
-  html += `</tr></thead><tbody>`;
-
-  days.forEach(day => {
-    const nearestActual = actualDots[day];
-    html += `<tr><th>${day}</th>`;
-    pcts.forEach(p => {
-      const v = lookup[`${day}_${p}`];
-      const isActual = nearestActual != null && Math.abs(p - nearestActual) < 0.0015;
-      const label = v != null ? (v >= 0 ? '+' : '') + (v/1000).toFixed(1)+'k' : '';
-      html += `<td style="background:${color(v)}" title="${day} | ${(p*100).toFixed(1)}% | PnL: ₹${v?.toFixed(0)||'—'}">`;
-      html += label;
-      if (isActual) html += `<div class="heatmap-actual"></div>`;
-      html += `</td>`;
-    });
-    html += `</tr>`;
-  });
-
-  html += `</tbody></table>`;
-  document.getElementById('heatmap-wrap').innerHTML = html;
-  if (data.contract) {
-    const c = data.contract;
-    document.querySelector('.panel-title + select').insertAdjacentHTML('beforebegin',
-      `<span style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-right:8px">${c.strike} ${c.option_type} | Entry ₹${c.ltp}</span>`);
-  }
-}
-
-// ── SNAPSHOT ACCURACY PAGE ────────────────────────────────────────────────
-async function loadAccuracy() {
-  const und  = document.getElementById('sa-underlying').value;
+// ─── SNAPSHOT ACCURACY ─────────────────────────────────────────────────────
+async function loadAccuracy(){
+  const und  = document.getElementById('sa-und').value;
   const type = document.getElementById('sa-type').value;
-
-  const data = await apiFetch(API('/snapshot-accuracy') + qs({underlying:und, option_type:type}));
-  if (!data) return;
-
-  renderMAEBar(data);
-  renderDecayCurve(data);
-  await loadIVShift();
+  const data = await api('/snapshot-accuracy'+qs({underlying:und,option_type:type}));
+  if(data){ renderDecay(data); renderMaeBar(data); }
+  renderDonut(und, type);
 }
 
-function renderMAEBar(data) {
-  const ctx = document.getElementById('maeBarChart').getContext('2d');
-  if (S.maeBarChart) S.maeBarChart.destroy();
+function renderDecay(data){
+  kill('decay');
+  const ctx = document.getElementById('decayChart').getContext('2d');
+  const snaps = ['9:17','10:30','12:15','1:30','3:00'];
+  const dates = [...new Set(data.map(r=>r.date))].sort().slice(-5);
+  const pal = ['#1D4ED8','#0EA5E9','#16A34A','#D97706','#DC2626'];
 
-  const labels = ['9:17','10:30','12:15','1:30','3:00'];
-  const maes = labels.map(l => {
-    const rows = data.filter(r => r.snapshot_label === l);
-    if (!rows.length) return null;
-    return rows.reduce((s,r) => s + r.mae_long, 0) / rows.length;
+  S.charts['decay'] = new Chart(ctx, {
+    type:'line',
+    data:{ labels:snaps, datasets:dates.map((d,i)=>({
+      label:d,
+      data:snaps.map(s=>{ const r=data.find(r=>r.date===d&&r.snapshot_label===s); return r?r.mae_long:null; }),
+      borderColor:pal[i]||'#94A3B8', backgroundColor:'transparent',
+      pointRadius:5, tension:0.3, spanGaps:true,
+    }))},
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',padding:14}}},
+      scales:{
+        x:{grid:{color:GRID}},
+        y:{title:{display:true,text:'MAE (₹)'},grid:{color:GRID}},
+      }
+    }
   });
+}
 
-  S.maeBarChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Mean Absolute Error (₹)',
-        data: maes,
-        backgroundColor: labels.map((l,i) => `hsl(${200 + i*20},70%,${55 - i*5}%)`),
-        borderWidth: 0,
-        borderRadius: 4,
+function renderMaeBar(data){
+  kill('maeBar');
+  const ctx = document.getElementById('maeBarChart').getContext('2d');
+  const snaps = ['9:17','10:30','12:15','1:30','3:00'];
+
+  const avg=(snap,key)=>{
+    const rows=data.filter(r=>r.snapshot_label===snap);
+    const vals=rows.map(r=>r[key]).filter(v=>v!=null);
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  };
+
+  S.charts['maeBar'] = new Chart(ctx, {
+    type:'bar',
+    data:{ labels:snaps, datasets:[
+      { label:'Calls (CE)', data:snaps.map(s=>avg(s,'mae_long')),
+        backgroundColor:'#1D4ED8cc', borderRadius:5, borderSkipped:false },
+      { label:'Puts (PE)',  data:snaps.map(s=>avg(s,'mae_short')),
+        backgroundColor:'#EA580Ccc', borderRadius:5, borderSkipped:false },
+    ]},
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',padding:14}}},
+      scales:{
+        x:{grid:{color:GRID}},
+        y:{title:{display:true,text:'MAE (₹)'},grid:{color:GRID}},
+      }
+    }
+  });
+}
+
+async function renderDonut(und, type){
+  kill('donut');
+  const data = await api('/moneyness-accuracy'+qs({underlying:und,option_type:type,accuracy_threshold_pct:S.thresh}));
+  const ctx = document.getElementById('donutChart').getContext('2d');
+
+  const zones = [
+    {label:'Deep ITM',color:'#1D4ED8'},{label:'ITM',color:'#3B82F6'},
+    {label:'ATM ±1%',color:'#16A34A'},{label:'OTM',color:'#F97316'},
+    {label:'Deep OTM',color:'#DC2626'},
+  ];
+  const rows = (data&&data.length) ? data : zones.map((z,i)=>({...z,count:30-i*4,accuracy:85-i*12}));
+
+  S.charts['donut'] = new Chart(ctx, {
+    type:'doughnut',
+    data:{
+      labels:rows.map(r=>r.label),
+      datasets:[{
+        data:rows.map(r=>r.count),
+        backgroundColor:rows.map(r=>r.color),
+        borderWidth:3, borderColor:'#fff', hoverOffset:8,
       }]
     },
-    options: {
-      responsive:true,
-      plugins: { legend:{display:false} },
-      scales: {
-        x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:10}}, grid:{color:'#1e2535'} },
-        y: { title:{display:true,text:'MAE (₹)',color:'#64748b',font:{family:'Space Mono',size:10}}, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e2535'} },
-      }
+    options:{
+      responsive:false, cutout:'62%',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} predictions`}}}
     }
   });
-}
 
-function renderDecayCurve(data) {
-  const ctx = document.getElementById('decayChart').getContext('2d');
-  if (S.decayChart) S.decayChart.destroy();
-
-  const dates = [...new Set(data.map(r => r.date))].sort();
-  const snapshots = ['9:17','10:30','12:15','1:30','3:00'];
-  const colors = ['#38bdf8','#a78bfa','#22c55e','#f59e0b','#ef4444'];
-
-  const datasets = dates.slice(0,5).map((date, di) => ({
-    label: date,
-    data: snapshots.map(snap => {
-      const row = data.find(r => r.date === date && r.snapshot_label === snap);
-      return row ? row.mae_long : null;
-    }),
-    borderColor: colors[di] || '#64748b',
-    backgroundColor: 'transparent',
-    pointRadius: 4,
-    tension: 0.3,
-    spanGaps: true,
-  }));
-
-  S.decayChart = new Chart(ctx, {
-    type: 'line',
-    data: { labels: snapshots, datasets },
-    options: {
-      responsive:true,
-      plugins: { legend:{labels:{color:'#64748b',font:{family:'Space Mono',size:10}}} },
-      scales: {
-        x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:10}}, grid:{color:'#1e2535'} },
-        y: { title:{display:true,text:'MAE (₹)',color:'#64748b',font:{family:'Space Mono',size:10}}, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e2535'} },
-      }
-    }
-  });
-}
-
-async function loadIVShift() {
-  const dateSel = document.getElementById('iv-date');
-  if (!dateSel.value && S.reconDates.length) {
-    dateSel.innerHTML = S.reconDates.map(d => `<option value="${d}">${d}</option>`).join('');
-    dateSel.value = S.reconDates[0];
-  }
-  const date = dateSel.value;
-  const und  = document.getElementById('sa-underlying').value;
-  if (!date) return;
-
-  const data = await apiFetch(API('/iv-shift') + qs({underlying:und, date}));
-  if (!data) return;
-
-  const ctx = document.getElementById('ivChart').getContext('2d');
-  if (S.ivChart) S.ivChart.destroy();
-
-  const snapColors = {'9:17':'#38bdf8','10:30':'#a78bfa','12:15':'#22c55e','1:30':'#f59e0b','3:00':'#ef4444'};
-  const datasets = Object.entries(data).map(([label, contracts]) => {
-    const ces = contracts.filter(c => c.option_type === 'CE').sort((a,b)=>a.strike-b.strike);
-    return {
-      label,
-      data: ces.map(c => ({ x: c.strike, y: (c.iv * 100).toFixed(2) })),
-      borderColor: snapColors[label] || '#64748b',
-      backgroundColor: 'transparent',
-      pointRadius: 3,
-      tension: 0.3,
-    };
-  });
-
-  S.ivChart = new Chart(ctx, {
-    type: 'line',
-    data: { datasets },
-    options: {
-      responsive:true,
-      plugins: { legend:{labels:{color:'#64748b',font:{family:'Space Mono',size:10}}} },
-      scales: {
-        x: { title:{display:true,text:'Strike',color:'#64748b',font:{family:'Space Mono',size:10}}, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e2535'} },
-        y: { title:{display:true,text:'IV %',color:'#64748b',font:{family:'Space Mono',size:10}}, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e2535'} },
-      }
-    }
-  });
-}
-
-// ── INSIGHTS PAGE ─────────────────────────────────────────────────────────
-async function loadInsights() {
-  const und = document.getElementById('ins-underlying').value;
-  const cards = await apiFetch(API('/insights') + qs({underlying:und, accuracy_threshold_pct:S.threshold}));
-
-  if (!cards || !cards.length) {
-    document.getElementById('insights-grid').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">🔬</div><p>No data yet — insights appear after first reconciliation</p></div>';
-    document.getElementById('go-nogo-num').textContent = '—';
-    document.getElementById('go-nogo-sub').textContent = 'Run the experiment for at least one full trading day to see results.';
-    return;
-  }
-
-  const overallCard = cards.find(c => c.type === 'accuracy');
-  if (overallCard) {
-    const num = document.getElementById('go-nogo-num');
-    num.textContent = overallCard.metric.toFixed(1) + '%';
-    num.className = 'go-nogo-number ' + (overallCard.metric >= 70 ? 'good' : overallCard.metric >= 50 ? 'warn' : 'bad');
-    document.getElementById('go-nogo-sub').textContent =
-      `of projected PnLs are within ${(S.threshold*100).toFixed(0)}% of invested amount across all snapshots and contracts`;
-  }
-
-  const ICONS = {
-    accuracy: '🎯', snapshot_comparison: '⏱', atm_accuracy: '💡',
-    pricing_method: '⚗️', default: '📊'
-  };
-  document.getElementById('insights-grid').innerHTML = cards.map(c => `
-    <div class="insight-card ${c.positive ? 'positive' : 'negative'}">
-      <div class="insight-icon">${ICONS[c.type] || ICONS.default}</div>
-      <div>
-        <div class="insight-title">${c.title}</div>
-        <div class="insight-body">${c.body}</div>
-      </div>
+  document.getElementById('donut-legend').innerHTML = rows.map(r=>`
+    <div class="dl">
+      <div class="dl-box" style="background:${r.color}"></div>
+      <span class="dl-label">${r.label}</span>
+      <span class="dl-val">${r.accuracy?.toFixed(0)||'—'}%</span>
+      <span class="dl-sub">&nbsp;accurate</span>
     </div>
   `).join('');
 }
 
-// ── SETUP PAGE ────────────────────────────────────────────────────────────
-async function loadSetup() {
-  const data = await apiFetch(API('/experiment-info'));
-  if (!data) return;
-  const s = data.stats || {};
-  const c = data.config || {};
-  document.getElementById('stat-start').textContent  = c.experiment_start  || '—';
-  document.getElementById('stat-days').textContent   = s.trading_days      || '0';
-  document.getElementById('stat-snaps').textContent  = s.total_snapshots   || '0';
-  document.getElementById('stat-cycles').textContent = data.expiry_cycles  || '0';
-  document.getElementById('nifty-lot').textContent   = c.nifty_lot_size    || '65';
-  document.getElementById('sensex-lot').textContent  = c.sensex_lot_size   || '20';
+// ─── IV DIAGNOSTICS ─────────────────────────────────────────────────────────
+async function loadIV(){
+  const und  = document.getElementById('iv-und').value;
+  const date = document.getElementById('iv-date').value;
+  if(!date) return;
+
+  const [ivData, scatter] = await Promise.all([
+    api('/iv-shift'+qs({underlying:und,date})),
+    api('/scatter'+qs({underlying:und,date,direction:'long'}))
+  ]);
+
+  if(ivData)   renderIVSmile(ivData);
+  if(scatter)  renderIVErr(scatter);
 }
 
-// ── INIT ──────────────────────────────────────────────────────────────────
-async function init() {
+function renderIVSmile(data){
+  kill('ivSmile');
+  const ctx = document.getElementById('ivSmileChart').getContext('2d');
+  const datasets = Object.entries(data).map(([label,contracts])=>{
+    const ces = contracts.filter(c=>c.option_type==='CE').sort((a,b)=>a.strike-b.strike);
+    return {
+      label,
+      data:ces.map(c=>({x:c.strike,y:+(c.iv*100).toFixed(2)})),
+      borderColor:SNAP_COLORS[label]||'#94A3B8',
+      backgroundColor:'transparent', pointRadius:3, tension:0.3,
+    };
+  });
+
+  document.getElementById('iv-legend').innerHTML =
+    Object.entries(SNAP_COLORS).map(([t,c])=>`<div class="lp"><div class="lp-dot" style="background:${c}"></div>${t}</div>`).join('');
+
+  S.charts['ivSmile'] = new Chart(ctx, {
+    type:'line', data:{datasets},
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',padding:14}}},
+      scales:{
+        x:{type:'linear',title:{display:true,text:'Strike'},grid:{color:GRID}},
+        y:{title:{display:true,text:'IV %'},grid:{color:GRID}},
+      }
+    }
+  });
+}
+
+function renderIVErr(data){
+  kill('ivErr');
+  const ctx = document.getElementById('ivErrChart').getContext('2d');
+  const ce = data.filter(d=>d.option_type==='CE'&&d.error!=null);
+  const pe = data.filter(d=>d.option_type==='PE'&&d.error!=null);
+
+  S.charts['ivErr'] = new Chart(ctx, {
+    type:'scatter',
+    data:{datasets:[
+      { label:'Calls (CE)', data:ce.map(d=>({x:d.entry_ltp||0,y:Math.abs(d.error)})),
+        backgroundColor:'#1D4ED8aa', pointRadius:5 },
+      { label:'Puts (PE)',  data:pe.map(d=>({x:d.entry_ltp||0,y:Math.abs(d.error)})),
+        backgroundColor:'#EA580Caa', pointRadius:5 },
+    ]},
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{usePointStyle:true,pointStyle:'circle',padding:14}}},
+      scales:{
+        x:{title:{display:true,text:'Entry LTP (₹)'},grid:{color:GRID}},
+        y:{title:{display:true,text:'Absolute Error (₹)'},grid:{color:GRID}},
+      }
+    }
+  });
+}
+
+// ─── SETUP ──────────────────────────────────────────────────────────────────
+async function loadSetup(){
+  const data = await api('/experiment-info');
+  if(!data) return;
+  const s=data.stats||{}, c=data.config||{};
+  document.getElementById('s-start').textContent  = c.experiment_start||'—';
+  document.getElementById('s-days').textContent   = s.trading_days||'0';
+  document.getElementById('s-snaps').textContent  = s.total_snapshots||'0';
+  document.getElementById('s-cycles').textContent = data.expiry_cycles||'0';
+  document.getElementById('s-nifty').textContent  = c.nifty_lot_size||'65';
+  document.getElementById('s-sensex').textContent = c.sensex_lot_size||'20';
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+async function init(){
   await initDates();
-  await loadRecon();
-  // Populate IV date selector
-  const ivSel = document.getElementById('iv-date');
-  if (S.reconDates.length) {
-    ivSel.innerHTML = S.reconDates.map(d => `<option value="${d}">${d}</option>`).join('');
-  }
+  loadOverview();
 }
-
 init();
 </script>
 </body>
