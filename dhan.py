@@ -1,7 +1,11 @@
 """
 StreetBets - Dhan API Integration
 Uses official dhanhq SDK: dhanhq(client_id, access_token)
-Fetches option chain for Nifty and Sensex nearest expiry.
+
+SDK response structure (confirmed from live data):
+  expiry_list → {"status": "success", "data": {"data": [...], "status": "success"}}
+  option_chain → {"status": "success", "data": {"data": {"last_price": ..., "oc": {...}}, "status": "success"}}
+  i.e. data is double-nested: resp["data"]["data"]
 """
 
 import os
@@ -21,19 +25,34 @@ UNDERLYING_CONFIG = {
         "security_id": 13,
         "segment":     "IDX_I",
         "lot_size":    65,
-        "expiry_day":  3,
+        "expiry_day":  3,   # Thursday
     },
     "SENSEX": {
         "security_id": 51,
         "segment":     "IDX_I",
         "lot_size":    20,
-        "expiry_day":  4,
+        "expiry_day":  4,   # Friday
     },
 }
 
 
 def _client() -> dhanhq:
     return dhanhq(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN)
+
+
+def _unwrap_data(resp: dict, underlying: str, call: str) -> any:
+    """
+    SDK wraps responses as resp["data"]["data"].
+    Unwraps to the inner data payload.
+    """
+    if resp.get("status") != "success":
+        raise RuntimeError(f"{call} failed for {underlying}: {str(resp)[:300]}")
+    outer = resp.get("data", {})
+    # Double-nested: {"data": {"data": <actual>, "status": "success"}}
+    if isinstance(outer, dict) and "data" in outer:
+        return outer["data"]
+    # Single-nested: {"data": <actual>}
+    return outer
 
 
 def get_expiry_list(underlying: str) -> list:
@@ -43,9 +62,10 @@ def get_expiry_list(underlying: str) -> list:
         under_security_id=cfg["security_id"],
         under_exchange_segment=cfg["segment"],
     )
-    if resp.get("status") != "success":
-        raise RuntimeError(f"Expiry list failed for {underlying}: {resp}")
-    return sorted(resp.get("data", []))
+    data = _unwrap_data(resp, underlying, "expiry_list")
+    if not isinstance(data, list):
+        raise RuntimeError(f"Expiry list unexpected format for {underlying}: {data}")
+    return sorted(data)
 
 
 def get_nearest_expiry(underlying: str) -> Optional[str]:
@@ -56,6 +76,10 @@ def get_nearest_expiry(underlying: str) -> Optional[str]:
 
 
 def get_option_chain(underlying: str, expiry: str) -> dict:
+    """
+    Returns the unwrapped chain dict:
+    {"last_price": float, "oc": {strike: {"ce": {...}, "pe": {...}}}}
+    """
     cfg  = UNDERLYING_CONFIG[underlying]
     dhan = _client()
     resp = dhan.option_chain(
@@ -63,15 +87,20 @@ def get_option_chain(underlying: str, expiry: str) -> dict:
         under_exchange_segment=cfg["segment"],
         expiry=expiry,
     )
-    if resp.get("status") != "success":
-        raise RuntimeError(f"Option chain failed for {underlying}: {resp}")
-    return resp
+    data = _unwrap_data(resp, underlying, "option_chain")
+    if "last_price" not in data or "oc" not in data:
+        raise RuntimeError(f"Option chain unexpected format for {underlying}: {str(data)[:200]}")
+    return data
 
 
 def parse_chain(underlying: str, expiry: str, raw: dict, spot_range_pct: float = 0.05) -> dict:
+    """
+    raw = unwrapped chain dict from get_option_chain()
+    i.e. raw["last_price"] and raw["oc"] directly accessible.
+    """
     lot_size = UNDERLYING_CONFIG[underlying]["lot_size"]
-    spot     = raw["data"]["last_price"]
-    oc       = raw["data"]["oc"]
+    spot     = raw["last_price"]
+    oc       = raw["oc"]
     lower    = spot * (1 - spot_range_pct)
     upper    = spot * (1 + spot_range_pct)
 
@@ -109,15 +138,15 @@ def parse_chain(underlying: str, expiry: str, raw: dict, spot_range_pct: float =
             })
 
     contracts.sort(key=lambda x: (x["strike"], x["option_type"]))
-    logger.info(f"[Dhan] {underlying} @ {spot:.1f} | {len(contracts)} contracts within +-{spot_range_pct*100:.0f}%")
+    logger.info(f"[Dhan] {underlying} @ {spot:.1f} | {len(contracts)} contracts within ±{spot_range_pct*100:.0f}%")
     return {"spot": spot, "expiry": expiry, "contracts": contracts}
 
 
 def get_eod_ltp(underlying: str, expiry: str, security_ids: list) -> dict:
     try:
         raw  = get_option_chain(underlying, expiry)
-        spot = raw["data"]["last_price"]
-        oc   = raw["data"]["oc"]
+        spot = raw["last_price"]
+        oc   = raw["oc"]
         ltps = {}
         for strike_data in oc.values():
             for opt_type in ("ce", "pe"):
