@@ -2,22 +2,35 @@
 StreetBets - Pricing Engine
 Black-Scholes-Merton for non-expiry predictions.
 Intrinsic value for expiry-day predictions.
-T is always computed in minutes for precision.
+
+T CONVENTION (critical):
+  Dhan's IV is calibrated using T = calendar_days / 365.
+  We must use the same: T = calendar_seconds_to_expiry / (365 * 24 * 3600)
+
+  For a prediction (spot=X, day=D):
+    - The option still has life until expiry date, not until end of day D
+    - T = calendar seconds from 9:15 AM of prediction day D to expiry close
+    - This correctly prices what the option would be worth at day D open
+      given that predicted spot, with full remaining life to expiry
+
+  Why 9:15 of prediction day (not snapshot time)?
+    All predictions are EOD snapshots — "what if spot is X at end of day D?"
+    But we price the option at the START of day D (9:15 AM) to get a
+    consistent T regardless of which snapshot generated the prediction.
+    The entry LTP is from the snapshot, projected LTP uses start-of-day T.
 """
 
 import math
 from dataclasses import dataclass
 from typing import Literal
+from datetime import datetime, date, timedelta
 
 
-RISK_FREE_RATE = 0.065          # ~6.5% annualised (Gsec)
-TRADING_MINUTES_PER_DAY = 375   # 9:15 to 3:30
-TRADING_DAYS_PER_YEAR = 252
-MINUTES_PER_YEAR = TRADING_DAYS_PER_YEAR * TRADING_MINUTES_PER_DAY  # 94,500
+RISK_FREE_RATE   = 0.065   # 6.5% p.a. (Indian Gsec)
+SECS_PER_YEAR    = 365 * 24 * 3600   # 31,536,000 — calendar convention
 
 
 def _norm_cdf(x: float) -> float:
-    """Standard normal CDF via math.erf."""
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
 
 
@@ -36,52 +49,50 @@ class PricingResult:
     theta: float | None = None
     vega: float | None = None
     iv_used: float | None = None
-    t_minutes: float | None = None
+    t_years: float | None = None
 
 
 def bsm_price(
     option_type: Literal["CE", "PE"],
     spot: float,
     strike: float,
-    iv: float,                # annualised decimal e.g. 0.15
-    t_minutes: float,         # minutes to EOD of prediction day
+    iv: float,          # annualised decimal — calibrated to calendar days
+    t_years: float,     # T = calendar_seconds_to_expiry / SECS_PER_YEAR
     risk_free: float = RISK_FREE_RATE,
 ) -> PricingResult:
-    """
-    Price an option using BSM.
-    t_minutes = minutes from snapshot to EOD of the prediction day.
-    """
-    if t_minutes <= 0 or iv <= 0:
+    if t_years <= 0 or iv <= 0:
         return intrinsic_price(option_type, spot, strike)
 
-    T = t_minutes / MINUTES_PER_YEAR          # fraction of year
-    sqrt_T = math.sqrt(T)
+    sqrt_T = math.sqrt(t_years)
 
     try:
-        d1 = (math.log(spot / strike) + (risk_free + 0.5 * iv ** 2) * T) / (iv * sqrt_T)
+        d1 = (math.log(spot / strike) + (risk_free + 0.5 * iv**2) * t_years) / (iv * sqrt_T)
         d2 = d1 - iv * sqrt_T
     except (ValueError, ZeroDivisionError):
         return intrinsic_price(option_type, spot, strike)
 
     if option_type == "CE":
-        price = spot * _norm_cdf(d1) - strike * math.exp(-risk_free * T) * _norm_cdf(d2)
+        price = spot * _norm_cdf(d1) - strike * math.exp(-risk_free * t_years) * _norm_cdf(d2)
         delta = _norm_cdf(d1)
     else:
-        price = strike * math.exp(-risk_free * T) * _norm_cdf(-d2) - spot * _norm_cdf(-d1)
+        price = strike * math.exp(-risk_free * t_years) * _norm_cdf(-d2) - spot * _norm_cdf(-d1)
         delta = _norm_cdf(d1) - 1.0
 
     price = max(price, 0.0)
 
     gamma = _norm_pdf(d1) / (spot * iv * sqrt_T)
-    vega  = spot * _norm_pdf(d1) * sqrt_T / 100.0   # per 1% IV change
+    vega  = spot * _norm_pdf(d1) * sqrt_T / 100.0
     theta = (
         -(spot * _norm_pdf(d1) * iv) / (2.0 * sqrt_T)
-        - risk_free * strike * math.exp(-risk_free * T) * (
+        - risk_free * strike * math.exp(-risk_free * t_years) * (
             _norm_cdf(d2) if option_type == "CE" else _norm_cdf(-d2)
         )
-    ) / TRADING_DAYS_PER_YEAR                         # per trading day
+    ) / 365.0  # per calendar day
 
-    intrinsic = max(spot - strike, 0.0) if option_type == "CE" else max(strike - spot, 0.0)
+    intrinsic = (
+        max(spot - strike, 0.0) if option_type == "CE"
+        else max(strike - spot, 0.0)
+    )
 
     return PricingResult(
         method="BSM",
@@ -93,7 +104,7 @@ def bsm_price(
         theta=round(theta, 4),
         vega=round(vega, 4),
         iv_used=iv,
-        t_minutes=t_minutes,
+        t_years=t_years,
     )
 
 
@@ -102,15 +113,11 @@ def intrinsic_price(
     spot: float,
     strike: float,
 ) -> PricingResult:
-    """
-    Expiry settlement price = intrinsic value only.
-    Used when prediction_day == expiry_day.
-    """
-    if option_type == "CE":
-        intrinsic = max(spot - strike, 0.0)
-    else:
-        intrinsic = max(strike - spot, 0.0)
-
+    """Expiry settlement = intrinsic value only (T=0)."""
+    intrinsic = (
+        max(spot - strike, 0.0) if option_type == "CE"
+        else max(strike - spot, 0.0)
+    )
     return PricingResult(
         method="INTRINSIC",
         projected_ltp=round(intrinsic, 2),
@@ -130,95 +137,79 @@ def compute_pnl(
     return pnl_long, pnl_short
 
 
+def t_years_for_prediction(
+    prediction_date: date,
+    expiry_date: date,
+    expiry_close_hour: int = 15,
+    expiry_close_minute: int = 30,
+    market_open_hour: int = 9,
+    market_open_minute: int = 15,
+) -> float:
+    """
+    Compute T (in years, calendar convention) for a prediction on prediction_date.
+
+    T = calendar seconds from 9:15 AM of prediction_date to expiry close / SECS_PER_YEAR
+
+    Using start of prediction day (9:15 AM) as the pricing point so that
+    all snapshots on the same day produce the same T for the same prediction_date.
+    This gives a consistent "what is the option worth at start of day D?" price.
+
+    Returns 0.0 if prediction_date >= expiry_date (use intrinsic instead).
+    """
+    if prediction_date >= expiry_date:
+        return 0.0
+
+    # Pricing point: 9:15 AM of prediction_date
+    pricing_point = datetime(
+        prediction_date.year, prediction_date.month, prediction_date.day,
+        market_open_hour, market_open_minute, 0
+    )
+    # Expiry close: 3:30 PM of expiry_date
+    expiry_close = datetime(
+        expiry_date.year, expiry_date.month, expiry_date.day,
+        expiry_close_hour, expiry_close_minute, 0
+    )
+
+    secs = (expiry_close - pricing_point).total_seconds()
+    return max(secs / SECS_PER_YEAR, 0.0)
+
+
 def select_iv_for_predicted_spot(
     predicted_spot: float,
     option_type: Literal["CE", "PE"],
     contracts: list[dict],
 ) -> float | None:
     """
-    From the chain, find the IV of the strike closest to predicted_spot.
-    contracts: list of dicts with keys 'strike', 'option_type', 'iv'
-    Falls back to nearest available IV if exact type not found.
+    Find IV of the strike closest to predicted_spot for the given option_type.
+    Falls back to nearest strike of either type if no match for specific type.
     """
     relevant = [
         c for c in contracts
         if c["option_type"] == option_type and c.get("iv") and c["iv"] > 0
     ]
     if not relevant:
-        # fallback: any option type
         relevant = [c for c in contracts if c.get("iv") and c["iv"] > 0]
     if not relevant:
         return None
-
-    closest = min(relevant, key=lambda c: abs(c["strike"] - predicted_spot))
-    return closest["iv"]
-
-
-def minutes_to_eod(
-    snapshot_dt,          # datetime object (IST)
-    prediction_date,      # date object
-    eod_hour: int = 15,
-    eod_minute: int = 30,
-) -> float:
-    """
-    Compute trading minutes from snapshot_dt to EOD (3:30 PM) of prediction_date.
-    Only counts minutes within trading hours (9:15–15:30 IST).
-    For simplicity in POC: uses calendar minutes minus non-trading time.
-    """
-    from datetime import datetime, date, timedelta
-    import pytz
-
-    IST = pytz.timezone("Asia/Kolkata")
-
-    if isinstance(snapshot_dt, datetime) and snapshot_dt.tzinfo is None:
-        snapshot_dt = IST.localize(snapshot_dt)
-
-    pred_eod = IST.localize(datetime(
-        prediction_date.year, prediction_date.month, prediction_date.day,
-        eod_hour, eod_minute, 0
-    ))
-
-    if snapshot_dt >= pred_eod:
-        return 0.0
-
-    # Count trading minutes between snapshot and pred EOD
-    # Trading session: 9:15 to 15:30 = 375 minutes per day
-    total_minutes = 0.0
-    current = snapshot_dt
-
-    while current.date() <= prediction_date:
-        day_open  = IST.localize(datetime(current.year, current.month, current.day, 9, 15, 0))
-        day_close = IST.localize(datetime(current.year, current.month, current.day, 15, 30, 0))
-
-        if current.date() == prediction_date:
-            day_close = pred_eod
-
-        start = max(current, day_open)
-        end   = min(day_close, pred_eod)
-
-        if start < end:
-            total_minutes += (end - start).total_seconds() / 60.0
-
-        # Move to next day 9:15
-        next_day = current.date() + timedelta(days=1)
-        current  = IST.localize(datetime(next_day.year, next_day.month, next_day.day, 9, 15, 0))
-
-        if current.date() > prediction_date:
-            break
-
-    return max(total_minutes, 0.0)
+    return min(relevant, key=lambda c: abs(c["strike"] - predicted_spot))["iv"]
 
 
 if __name__ == "__main__":
-    # Quick sanity check
-    result = bsm_price("CE", spot=24000, strike=24000, iv=0.12, t_minutes=375)
-    print(f"ATM Call (1 day): ₹{result.projected_ltp} | Delta: {result.delta}")
+    from datetime import date
 
-    result2 = bsm_price("PE", spot=24000, strike=23500, iv=0.14, t_minutes=750)
-    print(f"OTM Put (2 days): ₹{result2.projected_ltp} | Delta: {result2.delta}")
+    # Sanity check: April 15 prediction, April 21 expiry
+    pred_date   = date(2026, 4, 15)
+    expiry_date = date(2026, 4, 21)
 
-    result3 = intrinsic_price("CE", spot=24200, strike=24000)
-    print(f"Expiry CE intrinsic: ₹{result3.projected_ltp}")
+    T = t_years_for_prediction(pred_date, expiry_date)
+    print(f"T (Apr15 → Apr21 expiry): {T:.6f} yr = {T*365:.3f} calendar days")
 
-    pnl_l, pnl_s = compute_pnl(result.projected_ltp, 120.0, 65)
-    print(f"Nifty long PnL: ₹{pnl_l} | short PnL: ₹{pnl_s}")
+    # Should give ~₹254 for 23900 CE with IV=19.28%
+    result = bsm_price("CE", spot=23900, strike=23900, iv=0.1928, t_years=T)
+    print(f"23900 CE: ₹{result.projected_ltp} | delta={result.delta} (actual LTP was ₹259)")
+
+    # Expiry day prediction
+    T_expiry = t_years_for_prediction(expiry_date, expiry_date)
+    print(f"\nT on expiry day: {T_expiry} → uses intrinsic")
+    result2 = bsm_price("CE", spot=24200, strike=23900, iv=0.18, t_years=T_expiry)
+    print(f"Expiry CE intrinsic (spot>strike): ₹{result2.projected_ltp}")
