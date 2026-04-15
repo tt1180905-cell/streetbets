@@ -438,26 +438,76 @@ def _build_filters(
     return " ".join(clauses), params
 
 
-# Serve dashboard static files
-# Use absolute path relative to this file — works regardless of working directory
-STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-
-@app.on_event("startup")
-async def startup():
-    if os.path.exists(STATIC_DIR):
-        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-        print(f"[Web] Static files served from {STATIC_DIR}")
-    else:
-        print(f"[Web] WARNING: static dir not found at {STATIC_DIR}")
+# Serve dashboard
+# index.html lives in same directory as api.py (app root)
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(APP_DIR, "static")
 
 @app.get("/")
 def root():
-    index = os.path.join(STATIC_DIR, "index.html")
-    if not os.path.exists(index):
-        return {"status": "StreetBets running", "error": f"Dashboard not found at {index}", "static_dir": STATIC_DIR, "files": os.listdir(os.path.dirname(STATIC_DIR)) if os.path.exists(os.path.dirname(STATIC_DIR)) else []}
-    return FileResponse(index)
+    # Try static/index.html first, then fall back to index.html in app root
+    candidates = [
+        os.path.join(STATIC_DIR, "index.html"),
+        os.path.join(APP_DIR, "index.html"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return FileResponse(path)
+    return {"status": "StreetBets running — dashboard not found", "looked_in": candidates}
+
+@app.on_event("startup")
+async def startup():
+    # Mount static dir if it exists, otherwise serve from app root
+    static_dir = STATIC_DIR if os.path.exists(STATIC_DIR) else APP_DIR
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    print(f"[Web] Serving static files from {static_dir}")
 
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+
+
+@app.get("/api/moneyness-accuracy")
+def moneyness_accuracy(
+    underlying: str = "NIFTY",
+    option_type: str = None,
+    accuracy_threshold_pct: float = 0.10,
+):
+    """Accuracy % and prediction count grouped by moneyness zone."""
+    conn = db.get_conn()
+    filters, params = _build_filters(underlying, None, None, option_type)
+
+    rows = conn.execute(f"""
+        SELECT
+            CASE
+                WHEN ABS(rp.strike - s.spot_price) / s.spot_price > 0.03 AND rp.strike < s.spot_price AND rp.option_type='CE' THEN 'Deep ITM'
+                WHEN ABS(rp.strike - s.spot_price) / s.spot_price > 0.03 AND rp.strike > s.spot_price AND rp.option_type='PE' THEN 'Deep ITM'
+                WHEN ABS(rp.strike - s.spot_price) / s.spot_price BETWEEN 0.01 AND 0.03 AND rp.strike < s.spot_price AND rp.option_type='CE' THEN 'ITM'
+                WHEN ABS(rp.strike - s.spot_price) / s.spot_price BETWEEN 0.01 AND 0.03 AND rp.strike > s.spot_price AND rp.option_type='PE' THEN 'ITM'
+                WHEN ABS(rp.strike - s.spot_price) / s.spot_price <= 0.01 THEN 'ATM ±1%'
+                WHEN ABS(rp.strike - s.spot_price) / s.spot_price BETWEEN 0.01 AND 0.03 THEN 'OTM'
+                ELSE 'Deep OTM'
+            END as zone,
+            COUNT(*) as count,
+            SUM(within_threshold_long) * 100.0 / COUNT(*) as accuracy,
+            AVG(ABS(error_long)) as mae
+        FROM reconciled_predictions rp
+        JOIN snapshots s ON rp.snapshot_id = s.snapshot_id
+        WHERE rp.is_nearest_match=1 {filters}
+        GROUP BY zone
+        ORDER BY CASE zone
+            WHEN 'Deep ITM' THEN 1 WHEN 'ITM' THEN 2 WHEN 'ATM ±1%' THEN 3
+            WHEN 'OTM' THEN 4 WHEN 'Deep OTM' THEN 5 END
+    """, params).fetchall()
+    conn.close()
+
+    zone_colors = {
+        'Deep ITM': '#1D4ED8', 'ITM': '#3B82F6', 'ATM ±1%': '#16A34A',
+        'OTM': '#F97316', 'Deep OTM': '#DC2626'
+    }
+    return [
+        {**dict(r), "color": zone_colors.get(r["zone"], "#94A3B8"),
+         "label": r["zone"], "accuracy": round(r["accuracy"] or 0, 1)}
+        for r in rows
+    ]
